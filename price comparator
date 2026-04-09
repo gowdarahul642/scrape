@@ -1,0 +1,130 @@
+import shutil
+import tkinter as tk
+from tkinter import ttk, messagebox
+import ttkbootstrap as tb  # For better UI
+import matplotlib.pyplot as plt
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+
+from selenium import webdriver
+from selenium.webdriver.common.by import By
+from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.chrome.options import Options
+from webdriver_manager.chrome import ChromeDriverManager
+
+# Function to check if Chrome is installed and set up Selenium WebDriver
+def get_driver():
+    chrome_options = Options()
+    chrome_options.add_argument("--headless")  # Run without opening a browser
+    chrome_options.add_argument("--disable-gpu")
+    chrome_options.add_argument("--no-sandbox")
+
+    # Check if Chrome is installed
+    chrome_path = shutil.which("chrome") or shutil.which("google-chrome") or shutil.which("chromium")
+    
+    if chrome_path:
+        print(f"Using installed Chrome at: {chrome_path}")
+        service = Service(ChromeDriverManager().install())  # Use existing Chrome
+    else:
+        print("Chrome is not installed. Installing...")
+        service = Service(ChromeDriverManager().install())  # Install Chrome
+
+    return webdriver.Chrome(service=service, options=chrome_options)
+
+# Function to scrape price using XPath
+def scrape_price(url, xpath, is_amazon=False):
+    driver = get_driver()
+    driver.get(url)
+    
+    try:
+        element = driver.find_element(By.XPATH, xpath)  # Find price using XPath
+        price = element.text.strip()#.replace(",", "")  # Remove commas
+        
+        # Convert Amazon price from USD to INR using static conversion
+        if is_amazon and "$" in price:
+            price = float(price.replace("$", ""))  # Convert to float
+            inr_price = price * 80  # Convert using 1 USD = 80 INR
+            price = f"₹{round(inr_price, 2)}"  # Format INR price
+
+    except Exception:
+        price = "Price Not Found"
+    
+    driver.quit()
+    return price
+
+# Function to handle price comparison
+def compare_prices():
+    item = item_entry.get()
+    if not item:
+        messagebox.showerror("Input Error", "Please enter an item name.")
+        return
+    
+    websites = {
+        "Amazon": {
+            "url": f"https://www.amazon.com/s?k={item}",
+            "xpath": "//span[@class='a-price-whole']",
+            "is_amazon": True
+        },
+        "Flipkart": {
+            "url": f"https://www.flipkart.com/search?q={item}",
+            "xpath": '''//*[@id="container"]/div/div[3]/div[1]/div[2]/div[2]/div/div/div/a/div[2]/div[2]/div[1]/div[1]/div[1]'''
+        },
+        "eBay": {
+            "url": f"https://www.ebay.com/sch/i.html?_nkw={item}",
+            "xpath": "//span[@class='s-item__price']"
+        }
+    }
+
+    results_text.delete("1.0", tk.END)  # Clear previous results
+    prices = {}
+
+    for site, data in websites.items():
+        price = scrape_price(data["url"], data["xpath"], is_amazon=data.get("is_amazon", False))
+        prices[site] = float(price.replace("₹", "").replace(",", "")) if "₹" in price else 0
+        results_text.insert(tk.END, f"{site}: {price}\n")
+
+    plot_price_chart(prices)
+
+# Function to plot price comparison chart
+def plot_price_chart(prices):
+    fig, ax = plt.subplots(figsize=(5, 3))
+    sites = list(prices.keys())
+    price_values = list(prices.values())
+
+    ax.bar(sites, price_values, color=["blue", "green", "orange"])
+    ax.set_ylabel("Price (INR)")
+    ax.set_title("Price Comparison")
+
+    for widget in chart_frame.winfo_children():
+        widget.destroy()
+
+    canvas = FigureCanvasTkAgg(fig, master=chart_frame)
+    canvas.draw()
+    canvas.get_tk_widget().pack()
+
+# GUI setup using Tkinter & ttkbootstrap
+root = tb.Window(themename="darkly")
+root.title("Price Comparator")
+root.geometry("600x500")
+
+# Title
+tk.Label(root, text="Price Comparator", font=("Arial", 16, "bold"), fg="white", bg="#222").pack(pady=10)
+
+# Input field
+tk.Label(root, text="Enter item name:", font=("Arial", 12)).pack(pady=5)
+item_entry = tb.Entry(root, width=40, bootstyle="info")
+item_entry.pack(pady=5)
+
+# Compare Button
+compare_button = tb.Button(root, text="Compare Prices", command=compare_prices, bootstyle="primary")
+compare_button.pack(pady=10)
+
+# Results area
+results_text = tk.Text(root, height=6, width=60, font=("Arial", 10))
+results_text.pack(pady=10)
+
+# Chart Frame for graph visualization
+chart_frame = tk.Frame(root)
+chart_frame.pack(pady=10)
+
+# Run the GUI
+root.mainloop()
