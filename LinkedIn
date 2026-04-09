@@ -1,0 +1,139 @@
+import pandas as pd
+from selenium import webdriver
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.common.exceptions import TimeoutException, NoSuchElementException
+from bs4 import BeautifulSoup
+from time import sleep
+import os
+
+# ─────────────────────────────────────────────
+# CONFIGURATION — fill these in before running
+# ─────────────────────────────────────────────
+LINKEDIN_EMAIL    = "your_email@example.com"      # ← your LinkedIn login email
+LINKEDIN_PASSWORD = "your_password"               # ← your LinkedIn password
+SEARCH_URL        = (
+    "https://www.linkedin.com/search/results/people/"
+    "?keywords=ceo%20delhi&origin=CLUSTER_EXPANSION&sid=Aau"
+)
+OUTPUT_FILE       = os.path.join(os.path.expanduser("~"), "Desktop", "output.xlsx")
+# ─────────────────────────────────────────────
+
+
+def get_profile_urls(driver: webdriver.Chrome) -> list[str]:
+    """
+    Parse the current search-results page and return all unique
+    profile URLs (those containing 'linkedin.com/in/').
+    """
+    soup = BeautifulSoup(driver.page_source, "html.parser")
+    seen: set[str] = set()
+    urls: list[str] = []
+
+    for tag in soup.find_all("a", class_="app-aware-link"):
+        href = tag.get("href", "")
+        # Keep only profile links; strip query-string tracking params
+        if "linkedin.com/in/" in href:
+            clean = href.split("?")[0].rstrip("/")
+            if clean not in seen:
+                seen.add(clean)
+                urls.append(clean)
+    return urls
+
+
+def click_next_page(driver: webdriver.Chrome, timeout: int = 10) -> bool:
+    """
+    Scroll to the bottom, click the 'Next' pagination button, and wait
+    for the page to refresh.  Returns False when there is no next page.
+    """
+    driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+    sleep(2)
+
+    try:
+        next_btn = driver.find_element(
+            By.CSS_SELECTOR, "button.artdeco-pagination__button--next"
+        )
+    except NoSuchElementException:
+        print("  No 'Next' button found — reached the last page.")
+        return False
+
+    if next_btn.get_attribute("disabled"):
+        print("  'Next' button is disabled — reached the last page.")
+        return False
+
+    driver.execute_script("arguments[0].click();", next_btn)
+
+    try:
+        # Wait until the old button goes stale (page replaced)
+        WebDriverWait(driver, timeout).until(EC.staleness_of(next_btn))
+    except TimeoutException:
+        print("  Timed-out waiting for next page; continuing anyway.")
+
+    sleep(2)
+    return True
+
+
+def main() -> None:
+    # ── 1. Launch Chrome ──────────────────────────────────────────────
+    options = webdriver.ChromeOptions()
+    options.add_argument("--ignore-certificate-errors")
+    # Uncomment the next line to run headless (no visible browser window):
+    # options.add_argument("--headless=new")
+    driver = webdriver.Chrome(options=options)
+
+    try:
+        # ── 2. Log in to LinkedIn ─────────────────────────────────────
+        driver.get("https://www.linkedin.com/")
+
+        WebDriverWait(driver, 30).until(
+            EC.presence_of_element_located((By.ID, "session_key"))
+        ).send_keys(LINKEDIN_EMAIL)
+
+        driver.find_element(By.ID, "session_password").send_keys(LINKEDIN_PASSWORD)
+
+        WebDriverWait(driver, 30).until(
+            EC.element_to_be_clickable((By.XPATH, '//button[@type="submit"]'))
+        ).click()
+
+        WebDriverWait(driver, 60).until(EC.url_contains("linkedin.com/feed/"))
+        print("✔  Logged in successfully.")
+
+        # ── 3. Navigate to search results ─────────────────────────────
+        driver.get(SEARCH_URL)
+        sleep(3)
+        print("✔  Search page loaded.")
+
+        # ── 4. Scrape across multiple pages ───────────────────────────
+        num_pages = int(input("How many pages do you want to scrape? ").strip())
+        all_urls: list[str] = []
+
+        for page_num in range(1, num_pages + 1):
+            print(f"  Scraping page {page_num} …", end=" ")
+            page_urls = get_profile_urls(driver)
+            all_urls.extend(page_urls)
+            print(f"{len(page_urls)} profiles found  (total so far: {len(all_urls)})")
+
+            if page_num < num_pages:
+                if not click_next_page(driver):
+                    print("  No more pages available. Stopping early.")
+                    break
+
+        print(f"\n✔  Scraping complete — {len(all_urls)} unique profile URL(s) collected.")
+
+        # ── 5. Save to Excel ──────────────────────────────────────────
+        df = pd.DataFrame({"Profile URL": all_urls})
+        os.makedirs(os.path.dirname(OUTPUT_FILE), exist_ok=True)
+        df.to_excel(OUTPUT_FILE, index=False)
+        print(f"✔  Data saved to: {OUTPUT_FILE}")
+
+    except Exception as exc:
+        print(f"\n✘  An error occurred: {exc}")
+        raise
+
+    finally:
+        driver.quit()
+        print("✔  Browser closed.")
+
+
+if __name__ == "__main__":
+    main()
