@@ -1,0 +1,805 @@
+#!/usr/bin/env python3
+"""
+YouTube Audio Downloader
+ • Single URL download
+ • Search & download by query
+ • Genre Automation — bulk-download 5000+ songs across 180+ genres
+Requires: pip install yt-dlp
+"""
+
+import os
+import sys
+import threading
+import tkinter as tk
+from tkinter import ttk, messagebox, filedialog
+
+# ── Try importing yt-dlp ──────────────────────────────────────────────────────
+try:
+    import yt_dlp
+except ImportError:
+    import subprocess
+    print("Installing yt-dlp …")
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "yt-dlp"])
+    import yt_dlp
+
+# ── Default save path ─────────────────────────────────────────────────────────
+DEFAULT_FOLDER = os.path.join(os.path.expanduser("~"), "Desktop", "Music Downloads")
+os.makedirs(DEFAULT_FOLDER, exist_ok=True)
+
+# ── Genre presets ─────────────────────────────────────────────────────────────
+# (display_name, search_query)
+GENRE_PRESETS = [
+
+    # ── Bollywood / Hindi ─────────────────────────────────────────────────────
+    ("Bollywood Hits",                "best bollywood songs hindi"),
+    ("Bollywood Sad",                 "sad bollywood songs hindi"),
+    ("Bollywood Romantic",            "romantic hindi love songs"),
+    ("Bollywood Party",               "bollywood party dance songs"),
+    ("Bollywood Retro 60s-70s",       "old hindi retro songs 60s 70s"),
+    ("Bollywood 80s",                 "hindi songs 80s retro bollywood"),
+    ("Bollywood 90s",                 "best bollywood songs 90s hindi"),
+    ("Bollywood 2000s",               "best bollywood songs 2000s hindi"),
+    ("Bollywood 2010s",               "best bollywood hits 2010s hindi"),
+    ("Bollywood 2020s",               "best bollywood songs 2020s new"),
+    ("Bollywood Item Songs",          "bollywood item songs best"),
+    ("Bollywood Motivational",        "hindi motivational songs bollywood"),
+    ("Bollywood Rain Songs",          "hindi rain barish songs"),
+    ("Bollywood Breakup Songs",       "hindi breakup songs heartbreak"),
+    ("Bollywood Wedding Songs",       "hindi wedding shaadi songs"),
+    ("Bollywood Road Trip",           "hindi road trip travel songs"),
+    ("Hindi Indie - Bollywood Indie", "indie hindi independent music songs"),
+    ("Lofi Hindi",                    "lofi hindi chill songs"),
+    ("Hindi Rap",                     "best hindi rap songs"),
+    ("Hindi Rock",                    "hindi rock songs best"),
+
+    # ── Iconic Bollywood Artists ──────────────────────────────────────────────
+    ("AR Rahman",                     "AR Rahman best songs"),
+    ("Arijit Singh",                  "Arijit Singh best songs"),
+    ("Kishore Kumar",                 "Kishore Kumar best songs"),
+    ("Lata Mangeshkar",               "Lata Mangeshkar best songs"),
+    ("Mohammed Rafi",                 "Mohammed Rafi best songs"),
+    ("Asha Bhosle",                   "Asha Bhosle best songs"),
+    ("Kumar Sanu",                    "Kumar Sanu best songs"),
+    ("Udit Narayan",                  "Udit Narayan best songs"),
+    ("Sonu Nigam",                    "Sonu Nigam best songs"),
+    ("Shreya Ghoshal",                "Shreya Ghoshal best songs"),
+    ("Jubin Nautiyal",                "Jubin Nautiyal best songs"),
+    ("Atif Aslam",                    "Atif Aslam best songs"),
+    ("Sunidhi Chauhan",               "Sunidhi Chauhan best songs"),
+    ("Neha Kakkar",                   "Neha Kakkar best songs"),
+    ("Himesh Reshammiya",             "Himesh Reshammiya best songs"),
+    ("Shankar Ehsaan Loy",            "Shankar Ehsaan Loy best songs"),
+    ("Vishal Shekhar",                "Vishal Shekhar best songs"),
+    ("Pritam",                        "Pritam best songs bollywood"),
+    ("Amit Trivedi",                  "Amit Trivedi best songs"),
+    ("Shankar Mahadevan",             "Shankar Mahadevan best songs"),
+
+    # ── Punjabi ───────────────────────────────────────────────────────────────
+    ("Punjabi Pop",                   "top punjabi pop songs"),
+    ("Punjabi Sad",                   "sad punjabi songs"),
+    ("Punjabi Dance - Bhangra",       "punjabi bhangra dance songs"),
+    ("Punjabi Romantic",              "punjabi romantic love songs"),
+    ("Punjabi Hip-Hop - Rap",         "punjabi hip hop rap songs"),
+    ("Punjabi Folk",                  "punjabi folk traditional songs"),
+    ("Diljit Dosanjh",                "Diljit Dosanjh best songs"),
+    ("Sidhu Moosewala",               "Sidhu Moosewala best songs"),
+    ("AP Dhillon",                    "AP Dhillon best songs"),
+    ("Shubh",                         "Shubh punjabi singer best songs"),
+    ("Babbu Maan",                    "Babbu Maan best songs"),
+
+    # ── South Indian ──────────────────────────────────────────────────────────
+    ("Tamil Hits",                    "best tamil songs"),
+    ("Tamil Sad",                     "sad tamil songs"),
+    ("Tamil Romantic",                "tamil romantic love songs"),
+    ("Tamil Folk",                    "tamil folk songs traditional"),
+    ("Tamil Rap",                     "tamil rap songs best"),
+    ("Telugu Hits",                   "best telugu songs"),
+    ("Telugu Sad",                    "sad telugu songs"),
+    ("Telugu Romantic",               "telugu romantic songs"),
+    ("Telugu Folk",                   "telugu folk songs"),
+    ("Malayalam Hits",                "best malayalam songs"),
+    ("Malayalam Romantic",            "malayalam romantic songs"),
+    ("Malayalam Sad",                 "sad malayalam songs"),
+    ("Kannada Hits",                  "best kannada songs"),
+    ("Kannada Romantic",              "kannada romantic songs"),
+    ("Carnatic Classical",            "carnatic classical music vocal"),
+    ("Ilayaraja",                     "Ilayaraja best songs Tamil"),
+    ("Devi Sri Prasad",               "Devi Sri Prasad best songs telugu"),
+
+    # ── Indian Regional ───────────────────────────────────────────────────────
+    ("Marathi Hits",                  "best marathi songs"),
+    ("Marathi Lavani",                "marathi lavani folk songs"),
+    ("Bengali Hits",                  "best bengali songs"),
+    ("Bengali Rabindra Sangeet",      "rabindra sangeet bengali songs"),
+    ("Odia Hits",                     "best odia songs"),
+    ("Gujarati Hits",                 "best gujarati songs"),
+    ("Gujarati Garba",                "gujarati garba navratri songs"),
+    ("Rajasthani Folk",               "rajasthani folk songs"),
+    ("Haryanvi Songs",                "haryanvi songs best hits"),
+    ("Bhojpuri Hits",                 "best bhojpuri songs"),
+    ("Assamese Hits",                 "best assamese songs"),
+    ("Nepali Hits",                   "best nepali songs"),
+
+    # ── Indian Classical / Spiritual ──────────────────────────────────────────
+    ("Indian Classical Vocal",        "Indian classical vocal music hindustani"),
+    ("Indian Classical Instrumental", "Indian classical sitar tabla sarod instrumental"),
+    ("Hindustani Ragas",              "hindustani raga classical music"),
+    ("Ghazal",                        "best ghazal songs hindi urdu"),
+    ("Sufi - Qawwali",                "sufi qawwali best songs"),
+    ("Devotional Hindi Bhajan",       "hindi devotional bhajan songs"),
+    ("Devotional Tamil",              "tamil devotional songs"),
+    ("Devotional Telugu",             "telugu devotional songs"),
+    ("Nusrat Fateh Ali Khan",         "Nusrat Fateh Ali Khan best qawwali"),
+    ("Jagjit Singh Ghazal",           "Jagjit Singh best ghazals"),
+    ("Bhimsen Joshi",                 "Pandit Bhimsen Joshi classical songs"),
+
+    # ── Pakistani ─────────────────────────────────────────────────────────────
+    ("Pakistani Pop",                 "best pakistani pop songs"),
+    ("Pakistani Coke Studio",         "coke studio pakistan best songs"),
+    ("Pakistani Rock",                "best pakistani rock songs"),
+    ("Rahat Fateh Ali Khan",          "Rahat Fateh Ali Khan best songs"),
+
+    # ── Pop / Western ─────────────────────────────────────────────────────────
+    ("Pop Hits",                      "top pop songs"),
+    ("Pop Sad",                       "sad pop songs"),
+    ("Pop Romantic",                  "romantic pop love songs"),
+    ("Pop 2024",                      "best pop songs 2024"),
+    ("Pop Upbeat",                    "upbeat happy pop songs"),
+    ("Indie Pop",                     "best indie pop songs"),
+    ("Synth Pop",                     "best synth pop songs 80s"),
+    ("Dream Pop",                     "best dream pop songs"),
+    ("Electropop",                    "best electropop songs"),
+    ("K-Pop",                         "best kpop songs"),
+    ("K-Pop Girl Groups",             "kpop girl group songs best"),
+    ("K-Pop Boy Bands",               "kpop boy band songs best"),
+    ("J-Pop",                         "best jpop songs japanese"),
+    ("C-Pop - Mandopop",              "best cpop mandopop chinese songs"),
+    ("Latin Pop",                     "best latin pop songs"),
+    ("Reggaeton",                     "best reggaeton songs"),
+    ("Afrobeats",                     "best afrobeats songs"),
+
+    # ── Hip-Hop / R&B ─────────────────────────────────────────────────────────
+    ("Hip-Hop",                       "best hip hop songs"),
+    ("R&B",                           "best rnb songs"),
+    ("Trap",                          "best trap music songs"),
+    ("Old School Hip-Hop",            "old school hip hop classic songs"),
+    ("Conscious Hip-Hop",             "conscious rap hip hop songs"),
+    ("Drill",                         "best drill music songs"),
+    ("Boom Bap",                      "best boom bap hip hop songs"),
+    ("Hip-Hop Sad",                   "sad emotional hip hop songs"),
+    ("Melodic Rap",                   "best melodic rap songs"),
+    ("UK Rap - Grime",                "best uk rap grime songs"),
+
+    # ── Electronic / Dance ────────────────────────────────────────────────────
+    ("EDM",                           "best edm songs"),
+    ("House",                         "best house music songs"),
+    ("Deep House",                    "best deep house music"),
+    ("Tech House",                    "best tech house music"),
+    ("Techno",                        "best techno music"),
+    ("Progressive House",             "best progressive house music"),
+    ("Big Room EDM",                  "best big room edm songs"),
+    ("Future Bass",                   "best future bass songs"),
+    ("Dubstep",                       "best dubstep songs"),
+    ("Chillout - Ambient",            "best chillout ambient music"),
+    ("Lofi Hip Hop",                  "lofi hip hop chill beats"),
+    ("Lofi Study",                    "lofi study music beats"),
+    ("Drum and Bass",                 "best drum and bass music"),
+    ("Trance",                        "best trance music songs"),
+    ("Psytrance",                     "best psytrance music"),
+    ("Dancehall",                     "best dancehall songs"),
+    ("Garage - UK Garage",            "best uk garage songs"),
+    ("Hardstyle",                     "best hardstyle music"),
+    ("Synthwave",                     "best synthwave retrowave music"),
+    ("Vaporwave",                     "best vaporwave music"),
+    ("Chillwave",                     "best chillwave music songs"),
+
+    # ── Rock / Metal ──────────────────────────────────────────────────────────
+    ("Classic Rock",                  "best classic rock songs"),
+    ("Indie Rock",                    "best indie rock songs"),
+    ("Alternative Rock",              "best alternative rock songs"),
+    ("Punk Rock",                     "best punk rock songs"),
+    ("Pop Punk",                      "best pop punk songs"),
+    ("Emo",                           "best emo songs"),
+    ("Grunge",                        "best grunge songs 90s"),
+    ("Hard Rock",                     "best hard rock songs"),
+    ("Metal",                         "best heavy metal songs"),
+    ("Death Metal",                   "best death metal songs"),
+    ("Black Metal",                   "best black metal songs"),
+    ("Progressive Rock",              "best progressive rock songs"),
+    ("Psychedelic Rock",              "best psychedelic rock songs"),
+    ("Soft Rock",                     "best soft rock songs"),
+    ("Post Rock",                     "best post rock instrumental songs"),
+    ("Math Rock",                     "best math rock songs"),
+    ("Shoegaze",                      "best shoegaze songs"),
+
+    # ── Jazz / Blues / Soul / Funk ────────────────────────────────────────────
+    ("Jazz",                          "best jazz songs instrumental"),
+    ("Smooth Jazz",                   "best smooth jazz music"),
+    ("Jazz Vocals",                   "best jazz vocal songs"),
+    ("Blues",                         "best blues songs"),
+    ("Soul",                          "best soul music songs"),
+    ("Neo-Soul",                      "best neo soul songs"),
+    ("Funk",                          "best funk music songs"),
+    ("Gospel",                        "best gospel songs christian"),
+    ("Motown",                        "best motown songs classic"),
+    ("Bossa Nova",                    "best bossa nova songs"),
+
+    # ── Country / Folk / World ────────────────────────────────────────────────
+    ("Country",                       "best country songs"),
+    ("Country Pop",                   "best country pop songs"),
+    ("Folk",                          "best folk songs acoustic"),
+    ("Americana",                     "best americana music songs"),
+    ("Bluegrass",                     "best bluegrass songs"),
+    ("Celtic - Irish Folk",           "best celtic irish folk music"),
+    ("Flamenco",                      "best flamenco guitar music"),
+    ("Fado",                          "best fado portuguese music"),
+    ("African Music",                 "best african music songs"),
+    ("Reggae",                        "best reggae songs"),
+    ("Ska",                           "best ska songs"),
+
+    # ── Classical / Cinematic / Instrumental ──────────────────────────────────
+    ("Classical Piano",               "best classical piano pieces"),
+    ("Classical Orchestra",           "best classical orchestra music"),
+    ("Beethoven",                     "Beethoven best classical pieces"),
+    ("Mozart",                        "Mozart best classical pieces"),
+    ("Bach",                          "Bach best classical pieces"),
+    ("Chopin",                        "Chopin best piano pieces"),
+    ("Film Score - OST",              "best film score ost instrumental"),
+    ("Video Game Music",              "best video game music ost"),
+    ("Anime OST",                     "best anime ost soundtrack music"),
+    ("Guitar Instrumental",           "best acoustic guitar instrumental"),
+    ("Piano Instrumental",            "best piano instrumental music"),
+    ("Violin Instrumental",           "best violin instrumental music"),
+    ("Cello Instrumental",            "best cello instrumental music"),
+    ("Orchestra Cinematic",           "cinematic orchestral epic music"),
+    ("New Age",                       "best new age music instrumental"),
+
+    # ── Mood / Activity ───────────────────────────────────────────────────────
+    ("Workout - Gym",                 "best workout gym motivation songs"),
+    ("Running",                       "best running jogging music songs"),
+    ("Yoga",                          "yoga meditation music"),
+    ("Meditation",                    "meditation relaxing music"),
+    ("Sleep - Relax",                 "sleep relaxing calm music"),
+    ("Focus - Study",                 "focus study concentration music"),
+    ("Deep Focus",                    "deep focus work music no lyrics"),
+    ("Morning Energy",                "morning energy uplifting songs"),
+    ("Night Drive",                   "night drive chill music songs"),
+    ("Party - Dance",                 "best party dance songs"),
+    ("Feel Good",                     "feel good happy positive songs"),
+    ("Heartbreak",                    "heartbreak sad emotional songs"),
+    ("Rainy Day",                     "rainy day cozy relaxing music"),
+    ("Road Trip",                     "road trip songs best hits"),
+    ("Summer Hits",                   "best summer songs hits"),
+    ("Christmas - Festive",           "best christmas festive songs"),
+    ("Horror - Dark Ambient",         "dark ambient horror atmospheric music"),
+
+    # ── Era-based ─────────────────────────────────────────────────────────────
+    ("Retro 50s",                     "best 50s classic songs retro"),
+    ("Retro 60s",                     "best 60s classic songs retro"),
+    ("Retro 70s",                     "best 70s classic songs retro"),
+    ("Retro 80s",                     "best 80s retro songs"),
+    ("90s Hits",                      "best 90s hits songs"),
+    ("2000s Nostalgia",               "best 2000s songs nostalgia"),
+    ("2010s Throwback",               "best 2010s songs throwback"),
+    ("2020s New Hits",                "best songs 2023 2024 new hits"),
+]
+
+
+# ── Helpers ───────────────────────────────────────────────────────────────────
+def _fmt_duration(seconds):
+    if seconds is None:
+        return "?"
+    h, rem = divmod(int(seconds), 3600)
+    m, s   = divmod(rem, 60)
+    return f"{h}:{m:02d}:{s:02d}" if h else f"{m}:{s:02d}"
+
+
+def _safe_folder_name(name: str) -> str:
+    """Strip characters illegal in folder names on Windows, Mac, and Linux."""
+    for bad in r'/\\:*?"<>|':
+        name = name.replace(bad, "-")
+    name = " ".join(name.split()).strip(" -")
+    return name or "genre"
+
+
+# ── Core download functions ───────────────────────────────────────────────────
+def download_single(url: str, quality: str, save_folder: str, log_fn, done_fn):
+    format_map = {
+        "Best quality":     "best[ext=mp4]/best",
+        "1080p":            "best[height<=1080][ext=mp4]/best[height<=1080]/best",
+        "720p":             "best[height<=720][ext=mp4]/best[height<=720]/best",
+        "480p":             "best[height<=480][ext=mp4]/best[height<=480]/best",
+        "Audio only (m4a)": "bestaudio[ext=m4a]/bestaudio",
+    }
+    ydl_opts = {
+        "format":   format_map[quality],
+        "outtmpl":  os.path.join(save_folder, "%(title)s.%(ext)s"),
+        "quiet":    True,
+        "no_warnings": True,
+        "progress_hooks": [_make_hook(log_fn)],
+    }
+    try:
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info  = ydl.extract_info(url, download=True)
+            title = info.get("title", "Unknown")
+        done_fn(f'✅  Saved "{title}"\n    → {save_folder}')
+    except Exception as exc:
+        done_fn(f"❌  Error: {exc}")
+
+
+def _download_query(query: str, max_results: int, max_duration_min: int,
+                    save_folder: str, log_fn, stop_event):
+    """
+    Search YouTube for `query`, download audio for each result within duration limit.
+    Returns (downloaded, skipped_long, failed).
+    """
+    max_sec    = max_duration_min * 60
+    search_url = f"ytsearch{max_results}:{query}"
+    downloaded = skipped_long = failed = 0
+
+    ydl_opts = {
+        "format":       "bestaudio[ext=m4a]/bestaudio/best",
+        "outtmpl":      os.path.join(save_folder, "%(title)s.%(ext)s"),
+        "quiet":        True,
+        "no_warnings":  True,
+        "ignoreerrors": True,
+        "progress_hooks": [_make_hook(log_fn)],
+        "postprocessors": [{"key": "FFmpegMetadata", "add_metadata": True}],
+    }
+
+    try:
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            results = ydl.extract_info(search_url, download=False)
+            entries = results.get("entries", []) if results else []
+
+        for i, entry in enumerate(entries, 1):
+            if stop_event.is_set():
+                break
+            if not entry:
+                failed += 1
+                continue
+
+            title     = entry.get("title", f"Track {i}")
+            duration  = entry.get("duration")
+            video_url = entry.get("webpage_url") or entry.get("url")
+
+            # Duration filter — skip playlists / long compilations
+            if duration and duration > max_sec:
+                log_fn(f"   ⏭  [{_fmt_duration(duration)}] SKIPPED  {title}")
+                skipped_long += 1
+                continue
+
+            dur_label = f"[{_fmt_duration(duration)}] " if duration else ""
+            log_fn(f"   ⬇  {dur_label}{title}")
+            try:
+                with yt_dlp.YoutubeDL(ydl_opts) as ydl2:
+                    ydl2.download([video_url])
+                downloaded += 1
+                log_fn("      ✅  Done")
+            except Exception as exc:
+                failed += 1
+                log_fn(f"      ❌  {exc}")
+
+    except Exception as exc:
+        log_fn(f"   ❌  Search error: {exc}")
+        failed += 1
+
+    return downloaded, skipped_long, failed
+
+
+def search_and_download(query: str, max_results: int, max_duration_min: int,
+                        save_folder: str, log_fn, done_fn, stop_event):
+    os.makedirs(save_folder, exist_ok=True)
+    log_fn(f"🔍  Searching: \"{query}\"  (up to {max_results} results)")
+    log_fn(f"⏱  Max duration: {max_duration_min} min  |  📁  {save_folder}")
+    log_fn("─" * 55)
+    dl, sk, fa = _download_query(query, max_results, max_duration_min,
+                                  save_folder, log_fn, stop_event)
+    stopped = "  (stopped)" if stop_event.is_set() else ""
+    done_fn(
+        f"\n{'─'*55}\n"
+        f"✅  Done{stopped}\n"
+        f"   Downloaded : {dl}\n"
+        f"   Too long   : {sk}  (>{max_duration_min} min)\n"
+        f"   Failed     : {fa}\n"
+        f"📁  {save_folder}"
+    )
+
+
+def genre_automation(genres: list, songs_per_genre: int, max_duration_min: int,
+                     base_folder: str, log_fn, done_fn, stop_event):
+    """
+    Iterate over (genre_name, query) pairs.
+    Each genre is saved into base_folder/<genre_name>/ subfolder.
+    """
+    total_dl = total_sk = total_fa = 0
+    n = len(genres)
+
+    log_fn("🎵  Genre Automation started")
+    log_fn(f"   Genres      : {n}")
+    log_fn(f"   Songs/genre : {songs_per_genre}")
+    log_fn(f"   Max duration: {max_duration_min} min per track")
+    log_fn(f"   Base folder : {base_folder}")
+    log_fn("═" * 55)
+
+    for idx, (name, query) in enumerate(genres, 1):
+        if stop_event.is_set():
+            log_fn("\n⏹  Stopped by user.")
+            break
+
+        folder = os.path.join(base_folder, _safe_folder_name(name))
+        os.makedirs(folder, exist_ok=True)
+
+        log_fn(f"\n[{idx}/{n}]  🎸  {name}")
+        log_fn(f"   Query  : {query}")
+        log_fn(f"   Folder : …/{_safe_folder_name(name)}")
+
+        dl, sk, fa = _download_query(query, songs_per_genre, max_duration_min,
+                                      folder, log_fn, stop_event)
+        total_dl += dl
+        total_sk += sk
+        total_fa += fa
+        log_fn(f"   ── Genre done  ✅ {dl} downloaded  ⏭ {sk} skipped  ❌ {fa} failed")
+
+    stopped = "  (stopped early)" if stop_event.is_set() else ""
+    done_fn(
+        f"\n{'═'*55}\n"
+        f"🎵  Genre Automation complete{stopped}\n"
+        f"   Total downloaded  : {total_dl}\n"
+        f"   Too long skipped  : {total_sk}\n"
+        f"   Failed            : {total_fa}\n"
+        f"📁  {base_folder}"
+    )
+
+
+def _make_hook(log_fn):
+    def hook(d):
+        if d["status"] == "downloading":
+            pct   = d.get("_percent_str", "").strip()
+            speed = d.get("_speed_str",   "").strip()
+            eta   = d.get("_eta_str",     "").strip()
+            log_fn(f"      {pct}  {speed}  ETA {eta}")
+        elif d["status"] == "finished":
+            log_fn("      ⚙  Processing …")
+    return hook
+
+
+# ── GUI ───────────────────────────────────────────────────────────────────────
+class App(tk.Tk):
+    def __init__(self):
+        super().__init__()
+        self.title("YouTube Audio Downloader")
+        self.resizable(False, False)
+        self.save_folder = DEFAULT_FOLDER
+        self._stop_event = threading.Event()
+        self._genre_vars = []   # list of (BooleanVar, name, query)
+        self._build_ui()
+
+    # ═════════════════════════════════════════════════════════════════════════
+    def _build_ui(self):
+        hdr = tk.Frame(self, bg="#FF0000")
+        hdr.pack(fill="x")
+        tk.Label(hdr, text="▶  YouTube Audio Downloader",
+                 bg="#FF0000", fg="white",
+                 font=("Helvetica", 15, "bold")).pack(side="left", padx=14, pady=10)
+
+        self.nb = ttk.Notebook(self)
+        self.nb.pack(fill="both", expand=True, padx=10, pady=(10, 4))
+        self._build_single_tab()
+        self._build_search_tab()
+        self._build_genre_tab()
+
+        # shared save folder row
+        ff = tk.Frame(self, padx=14)
+        ff.pack(fill="x", pady=(0, 4))
+        tk.Label(ff, text="Save to:", font=("Helvetica", 11)).pack(side="left")
+        self.folder_var = tk.StringVar(value=self.save_folder)
+        tk.Entry(ff, textvariable=self.folder_var, width=44,
+                 font=("Helvetica", 10), state="readonly",
+                 relief="solid").pack(side="left", padx=(8, 4))
+        tk.Button(ff, text="Browse…", command=self._pick_folder,
+                  font=("Helvetica", 10), relief="flat",
+                  bg="#eeeeee", cursor="hand2").pack(side="left")
+
+        self.progress = ttk.Progressbar(self, mode="indeterminate", length=530)
+        self.progress.pack(padx=14, pady=(6, 2))
+
+        self.stop_btn = tk.Button(self, text="⏹  Stop", command=self._stop,
+                                  bg="#555", fg="white", relief="flat",
+                                  font=("Helvetica", 10), cursor="hand2",
+                                  state="disabled")
+        self.stop_btn.pack(pady=(0, 4))
+
+        self.log = tk.Text(self, height=11, width=74, state="disabled",
+                           font=("Courier", 9), bg="#0d0d0d", fg="#00ff88",
+                           relief="flat", padx=8, pady=6)
+        self.log.pack(padx=14, pady=(0, 14))
+
+    # ── Single-URL tab ────────────────────────────────────────────────────────
+    def _build_single_tab(self):
+        tab = tk.Frame(self.nb, padx=14, pady=10)
+        self.nb.add(tab, text="  Single URL  ")
+
+        tk.Label(tab, text="YouTube URL:", font=("Helvetica", 11)).grid(
+            row=0, column=0, sticky="w")
+        self.url_var = tk.StringVar()
+        tk.Entry(tab, textvariable=self.url_var, width=50,
+                 font=("Helvetica", 11)).grid(row=0, column=1, padx=(8, 0))
+
+        tk.Label(tab, text="Quality:", font=("Helvetica", 11)).grid(
+            row=1, column=0, sticky="w", pady=(10, 0))
+        self.quality_var = tk.StringVar(value="Audio only (m4a)")
+        ttk.Combobox(tab, textvariable=self.quality_var,
+                     values=["Best quality", "1080p", "720p", "480p", "Audio only (m4a)"],
+                     state="readonly", width=30,
+                     font=("Helvetica", 11)).grid(row=1, column=1, sticky="w",
+                                                   padx=(8, 0), pady=(10, 0))
+
+        self.single_btn = tk.Button(tab, text="  Download  ",
+                                    command=self._start_single,
+                                    bg="#FF0000", fg="white",
+                                    activebackground="#cc0000",
+                                    font=("Helvetica", 12, "bold"),
+                                    relief="flat", cursor="hand2", pady=5)
+        self.single_btn.grid(row=2, column=0, columnspan=2, pady=(14, 4))
+
+    # ── Search & Batch tab ────────────────────────────────────────────────────
+    def _build_search_tab(self):
+        tab = tk.Frame(self.nb, padx=14, pady=10)
+        self.nb.add(tab, text="  Search & Download  ")
+
+        tk.Label(tab, text="Search query:", font=("Helvetica", 11)).grid(
+            row=0, column=0, sticky="w")
+        self.search_var = tk.StringVar()
+        tk.Entry(tab, textvariable=self.search_var, width=50,
+                 font=("Helvetica", 11)).grid(row=0, column=1, padx=(8, 0))
+
+        tk.Label(tab, text="e.g.  sad indian songs  •  lofi hindi  •  AR Rahman hits",
+                 font=("Helvetica", 9), fg="#888").grid(
+                     row=1, column=0, columnspan=2, sticky="w", pady=(2, 0))
+
+        tk.Label(tab, text="Max results:", font=("Helvetica", 11)).grid(
+            row=2, column=0, sticky="w", pady=(10, 0))
+        self.max_results_var = tk.IntVar(value=20)
+        tk.Spinbox(tab, from_=1, to=100, textvariable=self.max_results_var,
+                   width=6, font=("Helvetica", 11)).grid(
+                       row=2, column=1, sticky="w", padx=(8, 0), pady=(10, 0))
+
+        tk.Label(tab, text="Max duration:", font=("Helvetica", 11)).grid(
+            row=3, column=0, sticky="w", pady=(10, 0))
+        df = tk.Frame(tab)
+        df.grid(row=3, column=1, sticky="w", padx=(8, 0), pady=(10, 0))
+        self.max_dur_var = tk.IntVar(value=10)
+        tk.Spinbox(df, from_=1, to=180, textvariable=self.max_dur_var,
+                   width=5, font=("Helvetica", 11)).pack(side="left")
+        tk.Label(df, text=" min  (longer tracks skipped)",
+                 font=("Helvetica", 9), fg="#888").pack(side="left")
+
+        tk.Label(tab, text="Format: Audio only (m4a)  •  metadata embedded",
+                 font=("Helvetica", 9), fg="#888").grid(
+                     row=4, column=0, columnspan=2, sticky="w", pady=(6, 0))
+
+        self.search_btn = tk.Button(tab, text="  🔍  Search & Download  ",
+                                    command=self._start_search,
+                                    bg="#FF0000", fg="white",
+                                    activebackground="#cc0000",
+                                    font=("Helvetica", 12, "bold"),
+                                    relief="flat", cursor="hand2", pady=5)
+        self.search_btn.grid(row=5, column=0, columnspan=2, pady=(14, 4))
+
+    # ── Genre Automation tab ──────────────────────────────────────────────────
+    def _build_genre_tab(self):
+        tab = tk.Frame(self.nb, padx=10, pady=8)
+        self.nb.add(tab, text="  🎵 Genre Automation  ")
+
+        # top controls row
+        ctrl = tk.Frame(tab)
+        ctrl.pack(fill="x")
+
+        tk.Label(ctrl, text="Songs per genre:", font=("Helvetica", 11)).pack(side="left")
+        self.spg_var = tk.IntVar(value=20)
+        tk.Spinbox(ctrl, from_=5, to=100, textvariable=self.spg_var,
+                   width=5, font=("Helvetica", 11)).pack(side="left", padx=(6, 18))
+
+        tk.Label(ctrl, text="Max duration:", font=("Helvetica", 11)).pack(side="left")
+        self.genre_dur_var = tk.IntVar(value=10)
+        tk.Spinbox(ctrl, from_=1, to=60, textvariable=self.genre_dur_var,
+                   width=4, font=("Helvetica", 11)).pack(side="left", padx=(6, 4))
+        tk.Label(ctrl, text="min", font=("Helvetica", 10), fg="#888").pack(side="left", padx=(0, 18))
+
+        self.est_label = tk.Label(ctrl, text="", font=("Helvetica", 10, "bold"), fg="#0055cc")
+        self.est_label.pack(side="left")
+
+        # select / deselect all row
+        btn_row = tk.Frame(tab)
+        btn_row.pack(fill="x", pady=(6, 2))
+        tk.Button(btn_row, text="✔ Select All", command=self._select_all_genres,
+                  font=("Helvetica", 9), relief="flat", bg="#ddeedd",
+                  cursor="hand2").pack(side="left", padx=(0, 6))
+        tk.Button(btn_row, text="✖ Deselect All", command=self._deselect_all_genres,
+                  font=("Helvetica", 9), relief="flat", bg="#ffdddd",
+                  cursor="hand2").pack(side="left")
+        tk.Label(btn_row,
+                 text="  Each genre is saved in its own subfolder",
+                 font=("Helvetica", 9), fg="#888").pack(side="left", padx=(12, 0))
+
+        # scrollable checklist
+        list_frame = tk.Frame(tab, relief="sunken", bd=1)
+        list_frame.pack(fill="both", expand=True, pady=(4, 6))
+
+        canvas = tk.Canvas(list_frame, height=220, bg="white", highlightthickness=0)
+        vsb    = ttk.Scrollbar(list_frame, orient="vertical", command=canvas.yview)
+        canvas.configure(yscrollcommand=vsb.set)
+        vsb.pack(side="right", fill="y")
+        canvas.pack(side="left", fill="both", expand=True)
+
+        inner = tk.Frame(canvas, bg="white")
+        canvas.create_window((0, 0), window=inner, anchor="nw")
+
+        COLS = 3
+        self._genre_vars = []
+        for i, (name, query) in enumerate(GENRE_PRESETS):
+            var = tk.BooleanVar(value=True)
+            var.trace_add("write", lambda *_: self._update_estimate())
+            cb = tk.Checkbutton(inner, text=name, variable=var,
+                                bg="white", anchor="w",
+                                font=("Helvetica", 10), cursor="hand2")
+            cb.grid(row=i // COLS, column=i % COLS, sticky="w", padx=8, pady=1)
+            self._genre_vars.append((var, name, query))
+
+        inner.update_idletasks()
+        canvas.configure(scrollregion=canvas.bbox("all"))
+
+        def _on_wheel(e):
+            canvas.yview_scroll(int(-1 * (e.delta / 120)), "units")
+        canvas.bind("<MouseWheel>", _on_wheel)
+
+        # start button
+        self.genre_btn = tk.Button(tab, text="  🎵  Start Genre Automation  ",
+                                   command=self._start_genre,
+                                   bg="#FF0000", fg="white",
+                                   activebackground="#cc0000",
+                                   font=("Helvetica", 12, "bold"),
+                                   relief="flat", cursor="hand2", pady=6)
+        self.genre_btn.pack(pady=(4, 0))
+
+        # wire up estimate updates
+        self.spg_var.trace_add("write", lambda *_: self._update_estimate())
+        self._update_estimate()
+
+    # ── Estimate label ────────────────────────────────────────────────────────
+    def _update_estimate(self):
+        try:
+            selected = sum(1 for v, _, _ in self._genre_vars if v.get())
+            spg      = self.spg_var.get()
+            self.est_label.config(
+                text=f"≈ {selected * spg} songs  ({selected} genres × {spg})"
+            )
+        except Exception:
+            pass
+
+    def _select_all_genres(self):
+        for v, _, _ in self._genre_vars:
+            v.set(True)
+
+    def _deselect_all_genres(self):
+        for v, _, _ in self._genre_vars:
+            v.set(False)
+
+    # ── Folder picker ─────────────────────────────────────────────────────────
+    def _pick_folder(self):
+        folder = filedialog.askdirectory(title="Choose download folder",
+                                          initialdir=self.save_folder)
+        if folder:
+            self.save_folder = folder
+            self.folder_var.set(folder)
+
+    # ── Single download ───────────────────────────────────────────────────────
+    def _start_single(self):
+        url = self.url_var.get().strip()
+        if not url:
+            messagebox.showwarning("No URL", "Please paste a YouTube URL first.")
+            return
+        self._prepare_ui([self.single_btn, self.search_btn, self.genre_btn])
+        self._log(f"Saving to: {self.save_folder}")
+        threading.Thread(
+            target=download_single,
+            args=(url, self.quality_var.get(), self.save_folder,
+                  self._log, self._done),
+            daemon=True,
+        ).start()
+
+    # ── Search download ───────────────────────────────────────────────────────
+    def _start_search(self):
+        query = self.search_var.get().strip()
+        if not query:
+            messagebox.showwarning("No query", "Please enter a search term.")
+            return
+        max_r   = self.max_results_var.get()
+        max_dur = self.max_dur_var.get()
+        self._stop_event.clear()
+        self._prepare_ui([self.single_btn, self.search_btn, self.genre_btn])
+        threading.Thread(
+            target=search_and_download,
+            args=(query, max_r, max_dur, self.save_folder,
+                  self._log, self._done, self._stop_event),
+            daemon=True,
+        ).start()
+
+    # ── Genre automation ──────────────────────────────────────────────────────
+    def _start_genre(self):
+        selected = [(name, q) for v, name, q in self._genre_vars if v.get()]
+        if not selected:
+            messagebox.showwarning("No genres", "Select at least one genre.")
+            return
+        spg     = self.spg_var.get()
+        max_dur = self.genre_dur_var.get()
+        est     = len(selected) * spg
+
+        ok = messagebox.askyesno(
+            "Start Genre Automation",
+            f"About to download up to {est} songs\n"
+            f"across {len(selected)} genres  ({spg} songs per genre).\n\n"
+            f"Max duration  : {max_dur} min per track\n"
+            f"Save folder   : {self.save_folder}\n\n"
+            f"Each genre gets its own subfolder.\n\nProceed?"
+        )
+        if not ok:
+            return
+
+        self._stop_event.clear()
+        self._prepare_ui([self.single_btn, self.search_btn, self.genre_btn])
+        threading.Thread(
+            target=genre_automation,
+            args=(selected, spg, max_dur, self.save_folder,
+                  self._log, self._done, self._stop_event),
+            daemon=True,
+        ).start()
+
+    # ── Stop ──────────────────────────────────────────────────────────────────
+    def _stop(self):
+        self._stop_event.set()
+        self._log("⏹  Stop requested — finishing current track …")
+        self.stop_btn.config(state="disabled")
+
+    # ── UI helpers ────────────────────────────────────────────────────────────
+    def _prepare_ui(self, btns):
+        self._log_clear()
+        for b in btns:
+            b.config(state="disabled")
+        self.stop_btn.config(state="normal")
+        self.progress.start(10)
+
+    def _done(self, msg: str):
+        self.after(0, lambda: self._finish(msg))
+
+    def _finish(self, msg: str):
+        self.progress.stop()
+        self.single_btn.config(state="normal")
+        self.search_btn.config(state="normal")
+        self.genre_btn.config(state="normal")
+        self.stop_btn.config(state="disabled")
+        self._log(msg)
+        if "✅" in msg or "complete" in msg.lower():
+            messagebox.showinfo("Done!", msg[:300])
+        else:
+            messagebox.showerror("Failed", msg[:300])
+
+    def _log(self, text: str):
+        self.after(0, self._log_safe, text)
+
+    def _log_safe(self, text: str):
+        self.log.config(state="normal")
+        self.log.insert("end", text + "\n")
+        self.log.see("end")
+        self.log.config(state="disabled")
+
+    def _log_clear(self):
+        self.log.config(state="normal")
+        self.log.delete("1.0", "end")
+        self.log.config(state="disabled")
+
+
+# ── entry point ───────────────────────────────────────────────────────────────
+if __name__ == "__main__":
+    App().mainloop()
