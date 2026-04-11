@@ -1,0 +1,34 @@
+import os
+import shutil
+
+# ====== CHANGE THESE PATHS ======
+source_root = r""     # Folder containing subfolders
+destination_folder = r""  # Folder where merged images will go
+# =================================
+
+# Create destination folder if not exists
+os.makedirs(destination_folder, exist_ok=True)
+
+image_count = 1
+
+# Supported image extensions
+image_extensions = ('.jpg', '.jpeg', '.png', '.bmp', '.gif', '.webp')
+
+# Walk through all subfolders
+for root, dirs, files in os.walk(source_root):
+    for file in files:
+        if file.lower().endswith(image_extensions):
+            
+            source_path = os.path.join(root, file)
+            
+            # Preserve original extension
+            extension = os.path.splitext(file)[1]
+            
+            new_name = f"image{image_count}{extension}"
+            destination_path = os.path.join(destination_folder, new_name)
+            
+            shutil.copy2(source_path, destination_path)
+            
+            image_count += 1
+
+print(f"Done! {image_count - 1} images merged and renamed successfully.")
