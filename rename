@@ -1,0 +1,27 @@
+import os
+import re
+
+# ===== CHANGE THIS PATH =====
+folder_path = r""
+# ============================
+
+files = os.listdir(folder_path)
+
+for file in files:
+    if file.startswith("temp"):
+        
+        # Extract number from temp_x
+        match = re.search(r'\d+', file)
+        
+        if match:
+            number = match.group()
+            extension = os.path.splitext(file)[1]
+            
+            new_name = f"rel{number}{extension}"
+            
+            old_path = os.path.join(folder_path, file)
+            new_path = os.path.join(folder_path, new_name)
+            
+            os.rename(old_path, new_path)
+
+print("Renaming completed successfully.")
