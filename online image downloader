@@ -1,0 +1,76 @@
+import os
+import re
+import requests
+import tkinter as tk
+from tkinter import filedialog
+
+
+def extract_image_urls(query):
+    search_query = query.replace(" ", "+")
+    url = f"https://www.bing.com/images/search?q={search_query}"
+
+    # Set headers to simulate a browser visit
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0;Win64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110"
+    }
+
+    response = requests.get(url, headers=headers)
+    response.raise_for_status()
+    html_content = response.text
+
+    # Extract image URLs using regular expressions
+    image_urls = re.findall(r'murl&quot;:&quot;(.*?)&quot;', html_content)
+
+    return image_urls
+
+
+def download_image(url, save_directory, filename):
+    try:
+        response = requests.get(url, stream=True)
+        if response.status_code == 200:
+            image_path = os.path.join(save_directory, filename)
+            with open(image_path, "wb") as file:
+                for chunk in response.iter_content(1024):
+                    file.write(chunk)
+            print(f"Downloaded: {filename}")
+        else:
+            print(f"Failed to download: {filename}")
+    except Exception as e:
+        print(f"Error occurred while downloading image: {str(e)}")
+
+
+def download_images(query, save_directory):
+    image_urls = extract_image_urls(query)
+
+    if not os.path.exists(save_directory):
+        os.makedirs(save_directory)
+
+    count = 0
+    for url in image_urls:
+        filename = f"{count}.jpg"
+        download_image(url, save_directory, filename)
+        count += 1
+
+    print("Download completed.")
+
+
+def search_and_download():
+    query = entry.get()
+    save_directory = filedialog.askdirectory()
+    download_images(query, save_directory)
+
+
+# Create the GUI window
+window = tk.Tk()
+window.title("Image Downloader")
+
+# Create an entry box
+entry = tk.Entry(window, width=50)
+entry.pack(pady=10)
+
+# Create a button to initiate the search and download process
+button = tk.Button(window, text="Search and Download", command=search_and_download)
+button.pack(pady=10)
+
+# Start the GUI event loop
+window.mainloop()
